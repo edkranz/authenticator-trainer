@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Macrohard Authenticator</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: #e8e8e8;
+    min-height: 100vh;
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  .auth-header {
+    background: #0078d4;
+    color: white;
+    padding: 14px 16px;
+    font-size: 17px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-shrink: 0;
+  }
+  .auth-header .shield-icon { width: 22px; height: 22px; fill: white; }
+
+  .auth-body {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    padding: 0;
+    overflow-y: auto;
+  }
+
+  .request-card {
+    background: white;
+    margin: 12px;
+    border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+    overflow: hidden;
+  }
+
+  .request-header {
+    background: #fafafa;
+    padding: 16px;
+    border-bottom: 1px solid #f0f0f0;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .account-avatar {
+    width: 40px; height: 40px; border-radius: 50%;
+    background: #0078d4;
+    display: flex; align-items: center; justify-content: center;
+    color: white; font-weight: 600; font-size: 16px; flex-shrink: 0;
+  }
+  .account-info { flex: 1; min-width: 0; }
+  .account-name { font-size: 14px; font-weight: 600; color: #1b1b1b; }
+  .account-email { font-size: 12px; color: #616161; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  .request-body { padding: 20px 16px; }
+
+  .request-title {
+    font-size: 18px; font-weight: 600; color: #1b1b1b;
+    margin-bottom: 16px; text-align: center;
+  }
+
+  .request-details { font-size: 13px; color: #616161; margin-bottom: 20px; }
+  .request-details .detail-row { display: flex; justify-content: space-between; padding: 4px 0; }
+  .detail-label { color: #888; }
+  .detail-value { color: #1b1b1b; font-weight: 500; }
+
+  .number-input-section { text-align: center; padding: 8px 0 4px; }
+  .number-input-label { font-size: 14px; color: #616161; margin-bottom: 12px; }
+
+  /* Display-only digit boxes */
+  .code-input-wrap { display: flex; justify-content: center; gap: 12px; margin-bottom: 8px; }
+  .digit-box {
+    width: 56px; height: 64px;
+    border: 2px solid #c4c4c4; border-radius: 4px;
+    font-size: 32px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+    color: #1b1b1b; background: #fafafa;
+    font-variant-numeric: tabular-nums;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .digit-box.active { border-color: #0078d4; background: white; box-shadow: 0 0 0 1px #0078d4; }
+  .digit-box.filled { border-color: #0078d4; background: white; }
+  .digit-box.error { border-color: #d13438; background: #fdf3f4; animation: shake 0.3s ease-in-out; }
+  .digit-box.success { border-color: #107c10; background: #f0fff0; }
+
+  @keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    25% { transform: translateX(-6px); }
+    75% { transform: translateX(6px); }
+  }
+
+  /* Hidden input that actually captures keyboard */
+  #hidden-input {
+    position: fixed;
+    top: -100px;
+    left: 0;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+    font-size: 16px; /* prevent iOS zoom */
+  }
+
+  .action-buttons { display: flex; gap: 12px; padding: 12px 16px 16px; }
+  .btn-deny {
+    flex: 1; padding: 12px; font-size: 15px; font-weight: 600;
+    border: 1px solid #d13438; background: white; color: #d13438;
+    border-radius: 4px; cursor: pointer; font-family: inherit;
+  }
+  .btn-approve {
+    flex: 1; padding: 12px; font-size: 15px; font-weight: 600;
+    border: none; background: #0078d4; color: white;
+    border-radius: 4px; cursor: pointer; font-family: inherit;
+  }
+  .btn-approve:disabled { background: #c4c4c4; }
+
+  .result-toast {
+    position: fixed; top: 60px; left: 50%; transform: translateX(-50%);
+    background: #107c10; color: white; padding: 10px 24px; border-radius: 20px;
+    font-size: 16px; font-weight: 600; font-variant-numeric: tabular-nums;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.2); z-index: 100; display: none;
+  }
+  .result-toast.visible { display: block; }
+  .result-toast.fast-time { background: #0078d4; }
+
+  .status-screen {
+    flex: 1; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; padding: 32px; text-align: center;
+  }
+  .status-screen .status-text { font-size: 16px; color: #616161; margin-top: 16px; }
+  .status-screen .status-text.error { color: #d13438; }
+  .status-screen .status-text.ok { color: #107c10; }
+
+  .spinner {
+    width: 32px; height: 32px;
+    border: 3px solid #e0e0e0; border-top-color: #0078d4;
+    border-radius: 50%; animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .tap-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.4);
+    display: flex; align-items: center; justify-content: center; z-index: 200;
+  }
+  .tap-overlay .tap-card {
+    background: white; border-radius: 12px; padding: 32px 24px;
+    text-align: center; max-width: 280px; box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+  }
+  .tap-card h3 { font-size: 18px; color: #1b1b1b; margin-bottom: 8px; }
+  .tap-card p { font-size: 14px; color: #616161; margin-bottom: 20px; }
+  .tap-card button {
+    padding: 12px 40px; font-size: 16px; font-weight: 600;
+    background: #0078d4; color: white; border: none; border-radius: 4px;
+    cursor: pointer; font-family: inherit; width: 100%;
+  }
+
+  .hidden { display: none !important; }
+
+  .phone-stats {
+    background: white; margin: 0 12px 12px; border-radius: 8px;
+    padding: 12px 16px; display: none; box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+  }
+  .phone-stats-row { display: flex; justify-content: space-around; }
+  .phone-stat { text-align: center; }
+  .phone-stat-value { font-size: 18px; font-weight: 700; color: #0078d4; font-variant-numeric: tabular-nums; }
+  .phone-stat-label { font-size: 10px; color: #888; text-transform: uppercase; }
+</style>
+</head>
+<body>
+
+<div class="auth-header">
+  <svg class="shield-icon" viewBox="0 0 24 24" fill="white">
+    <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm-1 14l-3-3 1.41-1.41L11 12.17l4.59-4.58L17 9l-6 6z"/>
+  </svg>
+  Authenticator
+</div>
+
+<!-- Hidden input that captures all keyboard input -->
+<input type="tel" id="hidden-input" inputmode="numeric" pattern="[0-9]*"
+       autocomplete="off" autocorrect="off" autocapitalize="off">
+
+<div class="status-screen" id="screen-connecting">
+  <div class="spinner"></div>
+  <p class="status-text">Connecting to desktop...</p>
+</div>
+
+<div class="status-screen hidden" id="screen-waiting">
+  <svg width="48" height="48" viewBox="0 0 24 24" fill="#0078d4">
+    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+  </svg>
+  <p class="status-text ok">Connected to desktop</p>
+  <p class="status-text" style="margin-top:8px; font-size:14px;">Waiting for training to start...</p>
+</div>
+
+<div class="auth-body hidden" id="screen-game">
+  <div class="request-card">
+    <div class="request-header">
+      <div class="account-avatar">T</div>
+      <div class="account-info">
+        <div class="account-name">Training Mode</div>
+        <div class="account-email">authenticator-trainer@local</div>
+      </div>
+    </div>
+    <div class="request-body">
+      <div class="request-title">Are you trying to sign in?</div>
+      <div class="request-details">
+        <div class="detail-row">
+          <span class="detail-label">Application</span>
+          <span class="detail-value">Speed Training</span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-label">Round</span>
+          <span class="detail-value" id="round-num">1</span>
+        </div>
+      </div>
+      <div class="number-input-section">
+        <div class="number-input-label">Enter number shown on your screen</div>
+        <div class="code-input-wrap">
+          <div class="digit-box" id="box1"></div>
+          <div class="digit-box" id="box2"></div>
+        </div>
+      </div>
+    </div>
+    <div class="action-buttons">
+      <button class="btn-deny" id="btn-deny">No, it's not me</button>
+      <button class="btn-approve" id="btn-approve" disabled>Yes</button>
+    </div>
+  </div>
+
+  <div class="phone-stats" id="phone-stats">
+    <div class="phone-stats-row">
+      <div class="phone-stat">
+        <div class="phone-stat-value" id="ps-avg">-</div>
+        <div class="phone-stat-label">Average</div>
+      </div>
+      <div class="phone-stat">
+        <div class="phone-stat-value" id="ps-best">-</div>
+        <div class="phone-stat-label">Best</div>
+      </div>
+      <div class="phone-stat">
+        <div class="phone-stat-value" id="ps-rounds">0</div>
+        <div class="phone-stat-label">Rounds</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="result-toast" id="result-toast"></div>
+
+<div class="tap-overlay hidden" id="tap-overlay">
+  <div class="tap-card">
+    <h3>Ready to train</h3>
+    <p>Tap below to open the keyboard. It will stay open between rounds.</p>
+    <button id="tap-start-btn">Begin</button>
+  </div>
+</div>
+
+<div class="status-screen hidden" id="screen-disconnected">
+  <p class="status-text error">Desktop disconnected</p>
+</div>
+
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<script>
+  const hiddenInput = document.getElementById("hidden-input");
+  const box1 = document.getElementById("box1");
+  const box2 = document.getElementById("box2");
+  let conn = null;
+  let keyboardReady = false;
+  let inputLocked = false;
+  let digits = "";
+
+  function showScreen(id) {
+    document.querySelectorAll(".status-screen, .auth-body").forEach(el => el.classList.add("hidden"));
+    document.getElementById(id).classList.remove("hidden");
+  }
+
+  function send(msg) {
+    if (conn && conn.open) conn.send(JSON.stringify(msg));
+  }
+
+  function focusInput() {
+    hiddenInput.focus({ preventScroll: true });
+  }
+
+  function updateBoxes() {
+    box1.textContent = digits[0] || "";
+    box2.textContent = digits[1] || "";
+
+    box1.className = "digit-box";
+    box2.className = "digit-box";
+
+    if (digits.length === 0) box1.classList.add("active");
+    else if (digits.length === 1) { box1.classList.add("filled"); box2.classList.add("active"); }
+    else { box1.classList.add("filled"); box2.classList.add("filled"); }
+  }
+
+  function resetInput() {
+    digits = "";
+    hiddenInput.value = "";
+    inputLocked = false;
+    updateBoxes();
+    focusInput();
+  }
+
+  // Hidden input captures all keystrokes
+  hiddenInput.addEventListener("input", () => {
+    if (inputLocked) { hiddenInput.value = ""; return; }
+
+    // Extract only digits from whatever was typed
+    const raw = hiddenInput.value.replace(/\D/g, "");
+    digits = raw.slice(0, 2);
+    hiddenInput.value = digits;
+    updateBoxes();
+
+    // Auto-submit when 2 digits entered
+    if (digits.length === 2) {
+      inputLocked = true;
+      send({ type: "submit-code", code: digits });
+    }
+  });
+
+  // Tap anywhere on game screen → refocus hidden input (keeps keyboard open)
+  document.addEventListener("touchend", (e) => {
+    if (keyboardReady && !inputLocked) {
+      // Don't steal focus from the deny button
+      if (e.target.id !== "btn-deny") {
+        focusInput();
+      }
+    }
+  });
+
+  // Peer connection
+  const params = new URLSearchParams(window.location.search);
+  const desktopPeerId = params.get("peer");
+
+  if (!desktopPeerId) {
+    const el = document.getElementById("screen-connecting");
+    el.querySelector(".status-text").textContent = "No desktop session found. Scan the QR code from the desktop page.";
+    el.querySelector(".status-text").classList.add("error");
+    el.querySelector(".spinner").style.display = "none";
+  } else {
+    const peer = new Peer();
+
+    peer.on("open", () => {
+      conn = peer.connect(desktopPeerId, { reliable: true });
+
+      conn.on("open", () => {
+        showScreen("screen-waiting");
+      });
+
+      conn.on("data", (raw) => {
+        const msg = typeof raw === "string" ? JSON.parse(raw) : raw;
+        handleMessage(msg);
+      });
+
+      conn.on("close", () => {
+        showScreen("screen-disconnected");
+      });
+    });
+
+    peer.on("error", (err) => {
+      const el = document.getElementById("screen-connecting");
+      el.querySelector(".status-text").textContent = "Connection failed: " + err.type;
+      el.querySelector(".status-text").classList.add("error");
+      el.querySelector(".spinner").style.display = "none";
+    });
+  }
+
+  function handleMessage(msg) {
+    switch (msg.type) {
+      case "paired":
+        showScreen("screen-waiting");
+        break;
+
+      case "game-started":
+        // Always show tap overlay first time — we need the user gesture for keyboard
+        if (!keyboardReady) {
+          document.getElementById("tap-overlay").classList.remove("hidden");
+        } else {
+          showScreen("screen-game");
+          resetInput();
+        }
+        break;
+
+      case "code-ready":
+        showScreen("screen-game");
+        document.getElementById("round-num").textContent = msg.round;
+        document.getElementById("btn-approve").disabled = true;
+        resetInput();
+        break;
+
+      case "round-result":
+        inputLocked = true;
+        box1.className = "digit-box success";
+        box2.className = "digit-box success";
+
+        const secs = (msg.time / 1000).toFixed(3);
+        const toast = document.getElementById("result-toast");
+        toast.textContent = secs + "s";
+        toast.className = "result-toast visible" + (msg.time < 2000 ? " fast-time" : "");
+        setTimeout(() => toast.classList.remove("visible"), 1800);
+
+        document.getElementById("phone-stats").style.display = "block";
+        document.getElementById("ps-avg").textContent = (msg.avg / 1000).toFixed(2) + "s";
+        document.getElementById("ps-best").textContent = (msg.best / 1000).toFixed(2) + "s";
+        document.getElementById("ps-rounds").textContent = msg.times.length;
+        break;
+
+      case "wrong-code":
+        box1.className = "digit-box error";
+        box2.className = "digit-box error";
+        setTimeout(() => resetInput(), 300);
+        break;
+    }
+  }
+
+  // Tap-to-start: the user gesture that opens the keyboard
+  document.getElementById("tap-start-btn").addEventListener("click", () => {
+    keyboardReady = true;
+    document.getElementById("tap-overlay").classList.add("hidden");
+    showScreen("screen-game");
+    // This focus() is inside a click handler → keyboard will open on mobile
+    focusInput();
+  });
+
+  // Deny button clears input
+  document.getElementById("btn-deny").addEventListener("click", () => {
+    resetInput();
+  });
+</script>
+</body>
+</html>

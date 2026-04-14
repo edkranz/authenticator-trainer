@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Authenticator Trainer</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: #f2f2f2;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* Macrohard-style sign-in page */
+  .ms-page {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem;
+  }
+
+  .ms-card {
+    background: white;
+    border-radius: 4px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+    padding: 44px;
+    width: 440px;
+    max-width: 100%;
+  }
+
+  .ms-logo {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 24px;
+  }
+  .ms-logo svg { width: 20px; height: 20px; }
+  .ms-logo span {
+    font-size: 15px;
+    font-weight: 600;
+    color: #242424;
+  }
+
+  .ms-card h1 {
+    font-size: 24px;
+    font-weight: 600;
+    color: #1b1b1b;
+    margin-bottom: 16px;
+  }
+
+  .ms-card .ms-subtitle {
+    font-size: 13px;
+    color: #616161;
+    line-height: 1.5;
+    margin-bottom: 32px;
+  }
+
+  .code-number {
+    font-size: 96px;
+    font-weight: 700;
+    color: #1b1b1b;
+    text-align: center;
+    letter-spacing: 0.05em;
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+    padding: 16px 0;
+  }
+
+  .code-number.waiting {
+    color: #c4c4c4;
+  }
+
+  .timer-row {
+    text-align: center;
+    margin-top: 12px;
+    font-size: 14px;
+    color: #616161;
+    font-variant-numeric: tabular-nums;
+    min-height: 20px;
+  }
+
+  .result-flash {
+    text-align: center;
+    font-size: 16px;
+    font-weight: 600;
+    min-height: 24px;
+    margin-top: 8px;
+  }
+  .result-flash.success { color: #107c10; }
+  .result-flash.fast { color: #0078d4; }
+
+  .ms-link {
+    display: block;
+    margin-top: 24px;
+    font-size: 13px;
+    color: #0067b8;
+    text-decoration: none;
+    cursor: pointer;
+  }
+  .ms-link:hover { text-decoration: underline; }
+
+  /* QR connection section */
+  #qr-section {
+    text-align: center;
+    padding: 20px 0;
+  }
+  #qr-section .qr-wrap {
+    display: inline-block;
+    background: white;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    padding: 16px;
+  }
+  #qr-section canvas {
+    width: 180px;
+    height: 180px;
+  }
+  #qr-section .qr-label {
+    margin-top: 12px;
+    font-size: 13px;
+    color: #616161;
+  }
+
+  #status {
+    text-align: center;
+    font-size: 14px;
+    color: #616161;
+    margin-top: 16px;
+  }
+  #status.connected { color: #107c10; }
+  #status.warning { color: #d83b01; }
+
+  #start-btn {
+    display: none;
+    margin: 16px auto 0;
+    padding: 10px 32px;
+    font-size: 14px;
+    font-weight: 600;
+    background: #0067b8;
+    color: white;
+    border: none;
+    border-radius: 2px;
+    cursor: pointer;
+    font-family: inherit;
+  }
+  #start-btn:hover { background: #005a9e; }
+
+  /* Stats bar at the bottom */
+  .stats-bar {
+    background: #1b1b1b;
+    color: #e0e0e0;
+    padding: 16px 32px;
+    display: none;
+  }
+
+  .stats-bar-inner {
+    max-width: 960px;
+    margin: 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 40px;
+  }
+
+  .stats-title {
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #888;
+    white-space: nowrap;
+  }
+
+  .stats-group {
+    display: flex;
+    gap: 32px;
+    flex: 1;
+  }
+
+  .stat-item {
+    text-align: center;
+  }
+  .stat-value {
+    font-size: 22px;
+    font-weight: 700;
+    color: white;
+    font-variant-numeric: tabular-nums;
+  }
+  .stat-label {
+    font-size: 10px;
+    color: #888;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-top: 2px;
+  }
+
+  .history-bar {
+    display: flex;
+    gap: 3px;
+    align-items: flex-end;
+    flex: 1;
+    height: 40px;
+    min-width: 0;
+  }
+  .history-col {
+    flex: 1;
+    min-width: 4px;
+    max-width: 16px;
+    border-radius: 2px 2px 0 0;
+    transition: height 0.2s;
+  }
+  .history-col.fast { background: #107c10; }
+  .history-col.medium { background: #d83b01; }
+  .history-col.slow { background: #a80000; }
+
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+
+<div class="ms-page">
+  <div class="ms-card">
+    <div class="ms-logo">
+      <!-- Macrohard 4-square logo -->
+      <svg viewBox="0 0 21 21">
+        <rect x="0" y="0" width="10" height="10" fill="#f25022"/>
+        <rect x="11" y="0" width="10" height="10" fill="#7fba00"/>
+        <rect x="0" y="11" width="10" height="10" fill="#00a4ef"/>
+        <rect x="11" y="11" width="10" height="10" fill="#ffb900"/>
+      </svg>
+      <span>Macrohard</span>
+    </div>
+
+    <h1 id="card-title">Approve sign in request</h1>
+    <p class="ms-subtitle" id="card-subtitle">
+      We've sent a notification to your mobile device. Enter the number shown below to complete sign in.
+    </p>
+
+    <div id="qr-section">
+      <div class="qr-wrap">
+        <canvas id="qr-canvas"></canvas>
+      </div>
+      <p class="qr-label">Scan with your phone camera to connect</p>
+    </div>
+
+    <p id="status"></p>
+    <button id="start-btn" onclick="startGame()">Start Training</button>
+
+    <div id="game-area" class="hidden">
+      <div class="code-number" id="code-display">--</div>
+      <div class="timer-row" id="timer"></div>
+      <div class="result-flash" id="result-flash"></div>
+    </div>
+
+    <a class="ms-link" id="round-label" style="display:none">Round <span id="round-num">1</span></a>
+  </div>
+</div>
+
+<div class="stats-bar" id="stats-bar">
+  <div class="stats-bar-inner">
+    <div class="stats-title">Session</div>
+    <div class="stats-group">
+      <div class="stat-item">
+        <div class="stat-value" id="stat-rounds">0</div>
+        <div class="stat-label">Rounds</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-value" id="stat-avg">-</div>
+        <div class="stat-label">Average</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-value" id="stat-best">-</div>
+        <div class="stat-label">Best</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-value" id="stat-last">-</div>
+        <div class="stat-label">Last</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-value" id="stat-streak">0</div>
+        <div class="stat-label">Streak &lt;2s</div>
+      </div>
+    </div>
+    <div class="history-bar" id="history-bar"></div>
+  </div>
+</div>
+
+<!-- PeerJS for WebRTC -->
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<!-- QR code generator (browser canvas) -->
+<script src="https://cdn.jsdelivr.net/npm/qrious@4.0.2/dist/qrious.min.js"></script>
+<script>
+  // Generate a short random peer ID
+  const peerId = "at-" + Math.random().toString(36).slice(2, 10);
+  let conn = null; // DataChannel connection to phone
+  let timerInterval = null;
+  let codeShownAt = null;
+  let fastStreak = 0;
+  let maxTime = 4000;
+  let peer = null;
+
+  // Game state (all managed here on desktop)
+  const game = {
+    roundNumber: 0,
+    currentCode: null,
+    times: [],
+    state: "waiting", // waiting | active | round_active
+  };
+
+  function generateCode() {
+    return Math.floor(10 + Math.random() * 90);
+  }
+
+  function send(msg) {
+    if (conn && conn.open) conn.send(JSON.stringify(msg));
+  }
+
+  // Wait for CDN scripts to load before using QRCode / Peer
+  window.addEventListener("load", function init() {
+    // Build QR code URL pointing to /play?peer=<id> on the same origin
+    const phoneUrl = window.location.origin + "/play?peer=" + peerId;
+    new QRious({
+      element: document.getElementById("qr-canvas"),
+      value: phoneUrl,
+      size: 180,
+      level: "M",
+    });
+
+    // Create PeerJS peer (uses public PeerJS signaling server)
+    peer = new Peer(peerId);
+    setupPeer();
+  });
+
+  function setupPeer() {
+
+    peer.on("open", (id) => {
+      document.getElementById("status").textContent = "";
+    });
+
+    peer.on("error", (err) => {
+      document.getElementById("status").textContent = "Connection error: " + err.type;
+      document.getElementById("status").className = "warning";
+    });
+
+    peer.on("connection", (dataConn) => {
+      conn = dataConn;
+
+      conn.on("open", () => {
+        document.getElementById("status").textContent = "Phone connected";
+        document.getElementById("status").className = "connected";
+        document.getElementById("qr-section").style.display = "none";
+        document.getElementById("start-btn").style.display = "block";
+        send({ type: "paired" });
+      });
+
+      conn.on("data", (raw) => {
+        const msg = typeof raw === "string" ? JSON.parse(raw) : raw;
+        if (msg.type === "submit-code") handleSubmit(msg.code);
+      });
+
+      conn.on("close", () => {
+        document.getElementById("status").textContent = "Phone disconnected — scan QR to reconnect";
+        document.getElementById("status").className = "warning";
+        document.getElementById("qr-section").style.display = "block";
+        document.getElementById("start-btn").style.display = "none";
+        document.getElementById("game-area").classList.add("hidden");
+        document.getElementById("round-label").style.display = "none";
+        game.state = "waiting";
+        stopTimer();
+      });
+    });
+  } // end setupPeer
+
+  function startGame() {
+    document.getElementById("history-bar").innerHTML = "";
+    fastStreak = 0;
+    maxTime = 4000;
+    game.roundNumber = 0;
+    game.times = [];
+    game.state = "active";
+    send({ type: "game-started" });
+    nextRound();
+  }
+
+  function nextRound() {
+    if (game.state !== "active") return;
+
+    game.roundNumber++;
+    game.currentCode = generateCode();
+    game.codeShownAt = Date.now();
+    game.state = "round_active";
+
+    // Update desktop UI
+    document.getElementById("game-area").classList.remove("hidden");
+    document.getElementById("start-btn").style.display = "none";
+    document.getElementById("code-display").textContent = game.currentCode;
+    document.getElementById("code-display").classList.remove("waiting");
+    document.getElementById("round-label").style.display = "block";
+    document.getElementById("round-num").textContent = game.roundNumber;
+    document.getElementById("result-flash").textContent = "";
+    document.getElementById("result-flash").className = "result-flash";
+    document.getElementById("stats-bar").style.display = "block";
+    codeShownAt = Date.now();
+    startTimer();
+
+    // Tell phone
+    send({ type: "code-ready", round: game.roundNumber });
+  }
+
+  function handleSubmit(submittedCode) {
+    if (game.state !== "round_active") return;
+
+    const now = Date.now();
+    const elapsed = now - game.codeShownAt;
+    const correct = parseInt(submittedCode) === game.currentCode;
+
+    if (correct) {
+      game.times.push(elapsed);
+      game.state = "active";
+
+      const result = {
+        type: "round-result",
+        correct: true,
+        time: elapsed,
+        round: game.roundNumber,
+        times: game.times,
+        avg: Math.round(game.times.reduce((a, b) => a + b, 0) / game.times.length),
+        best: Math.min(...game.times),
+      };
+
+      // Update desktop UI
+      showResult(result);
+      // Send to phone
+      send(result);
+
+      setTimeout(() => {
+        if (game.state === "active") nextRound();
+      }, 2000);
+    } else {
+      send({ type: "wrong-code" });
+    }
+  }
+
+  function showResult(data) {
+    stopTimer();
+    const secs = (data.time / 1000).toFixed(3);
+    const flash = document.getElementById("result-flash");
+    if (data.time < 2000) {
+      flash.textContent = secs + "s";
+      flash.className = "result-flash fast";
+      fastStreak++;
+    } else {
+      flash.textContent = secs + "s";
+      flash.className = "result-flash success";
+      fastStreak = 0;
+    }
+
+    document.getElementById("code-display").classList.add("waiting");
+    document.getElementById("stat-avg").textContent = (data.avg / 1000).toFixed(2) + "s";
+    document.getElementById("stat-best").textContent = (data.best / 1000).toFixed(2) + "s";
+    document.getElementById("stat-last").textContent = (data.time / 1000).toFixed(2) + "s";
+    document.getElementById("stat-rounds").textContent = data.times.length;
+    document.getElementById("stat-streak").textContent = fastStreak;
+
+    if (data.time > maxTime) maxTime = data.time;
+    const bar = document.getElementById("history-bar");
+    const col = document.createElement("div");
+    const pct = Math.min(100, (data.time / maxTime) * 100);
+    col.className = "history-col " + (data.time < 2000 ? "fast" : data.time < 4000 ? "medium" : "slow");
+    col.style.height = Math.max(4, pct) + "%";
+    col.title = (data.time / 1000).toFixed(2) + "s";
+    bar.appendChild(col);
+  }
+
+  function startTimer() {
+    stopTimer();
+    timerInterval = setInterval(() => {
+      const elapsed = (Date.now() - codeShownAt) / 1000;
+      document.getElementById("timer").textContent = elapsed.toFixed(3) + "s";
+    }, 16);
+  }
+
+  function stopTimer() {
+    if (timerInterval) {
+      clearInterval(timerInterval);
+      timerInterval = null;
+    }
+  }
+</script>
+</body>
+</html>
